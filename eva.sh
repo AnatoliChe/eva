@@ -25,7 +25,7 @@ readonly TEMP_TOKEN_FILE="/tmp/.agent_tokens_$$"
 
 # API Defaults
 PROVIDER="ollama"
-MODEL="Qwen3.5:122b"
+MODEL="gpt-oss:20b"
 API_URL="http://localhost:11434/api/generate"
 CONTEXT_SIZE="${CONTEXT_SIZE:-327680}"
 MAX_STATS_ENTRIES="${MAX_STATS_ENTRIES:-1000}"
@@ -87,7 +87,7 @@ check_secrets() {
     log_info "Guardrails: Scanning for leaked secrets in generated code..."
     
     # Common patterns for API keys
-    local regex="(AIza[0-9A-Za-z-_]{35}|sk-[a-zA-Z0-9]{48}|AKIA[0-9A-Z]{16})"
+    local regex="(AIza[0-9A-Za-z_-]{35}|sk-[a-zA-Z0-9]{48}|AKIA[0-9A-Z]{16})"
     
     if grep -E -q "$regex" "$file_to_check"; then
         log_error "SECURITY VIOLATION: Potential API key or secret detected in the LLM output!"
