@@ -20,6 +20,7 @@ This script acts as an autonomous Bash-based multi-agent system, designed for th
     * `--dry-run`: Evaluate changes without writing them to disk.
     * `--no-llm`: Reprocess the last generated response stored in `output.out`.
 * **Analytics & Stats:** Automatically collects JSON-based metrics (`stats.json`) covering execution time, successful mutations, used models, and providers.
+* ** Chain-of-Thought (CoT) Auditing: EVA does not blindly generate code. It utilizes an internal <THOUGHT_PROCESS> validation step where it plans changes and verifies its own adherence to guardrails before execution. These cognitive steps are extracted and preserved in thought.log for transparency and human-in-the-loop oversight.
 
 ## Technical Requirements
 

@@ -12,11 +12,16 @@ CRITICAL SECURITY & CODE SAFETY REQUIREMENTS (GUARDRAILS):
 - FAIL-SAFE EXECUTION: Ensure that generated logic includes proper error trapping (`set -euo pipefail`) and clean exit codes so the autonomous loop does not break unexpectedly.
 - HTML ENTITIES: When using `sed` or `awk`, preserve HTML entities (e.g., `&amp;`). Work with code as raw text.
 
-OUTPUT FORMAT CONSTRAINTS:
-- Do NOT use markdown code blocks (e.g., ```bash) inside the XML tags. Return raw code/text directly.
-- Do NOT use the structural tags <CHANGES>, <README>, or <SCRIPT> as plain text inside your content unless they are the actual root XML wrappers.
 
-Return the result strictly in the following XML format so the parser can extract it:
+OUTPUT FORMAT CONSTRAINTS:
+- You must act as a reasoning agent. Before writing any code, you MUST output a <THOUGHT_PROCESS> block where you step-by-step analyze the problem, list the planned changes, and explicitly confirm how you will adhere to the Guardrails.
+- Do NOT use markdown code blocks (e.g., ```bash) inside the XML tags.
+- Do NOT use the structural tags as plain text inside your content.
+
+Return the result strictly in the following XML format:
+<THOUGHT_PROCESS>
+YOUR REASONING, ANALYSIS, AND PLANNING HERE
+</THOUGHT_PROCESS>
 <README>
 UPDATED README CONTENT HERE
 </README>

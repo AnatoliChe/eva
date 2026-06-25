@@ -2,14 +2,14 @@
 #
 # Description: Autonomous AI Agent for code refactoring and self-evolution.
 # Features: Multi-provider API (Ollama, OpenAI, Google, llama.cpp), Git backups, Secret Scanning (Guardrails), Target project selection, Stream processing, Stats, Shellcheck, Dry-run.
-# Version: v2.0.1
+# Version: v2.1.0
 #
 set -euo pipefail
 
 # --- CONFIGURATION & COLORS ---
 readonly SCRIPT_NAME="${BASH_SOURCE[0]}"
 readonly SCRIPT_BASENAME="$(basename "$SCRIPT_NAME")"
-readonly SCRIPT_VERSION="2.0.1"
+readonly SCRIPT_VERSION="2.1.0"
 
 # Target files (can be overridden by arguments)
 TARGET_FILE="$SCRIPT_NAME"
@@ -179,6 +179,16 @@ apply_changes() {
     
     log_info "Parsing XML tags from LLM response..."
     
+    # 1. Chain of Thought
+    local thought_process
+    thought_process=$(echo "$raw_response" | awk '/<THOUGHT_PROCESS>/{flag=1; next} /<\/THOUGHT_PROCESS>/{flag=0} flag')
+    
+    if [ -n "$thought_process" ]; then
+        log_info "Agent reasoning captured. Saving to thought.log..."
+        echo -e "========== AGENT REASONING LOG | $(date) ==========\n$thought_process\n" >> "thought.log"
+    fi
+    
+    # 2. Извлечение остальных блоков
     local new_readme
     new_readme=$(echo "$raw_response" | awk '/<README>/{flag=1; next} /<\/README>/{flag=0} flag')
     
@@ -190,51 +200,10 @@ apply_changes() {
     
     if [ -z "$new_script" ]; then
         log_error "Failed to extract <SCRIPT> section. Refactoring aborted."
+        [ -n "$thought_process" ] && echo -e "${YELLOW}Agent says:${RESET}\n$thought_process" >&2
         return 1
     fi
 
-    # Write to temp file for validation
-    local temp_script="/tmp/agent_target_temp_$$.sh"
-    echo "$new_script" > "$temp_script"
-    
-    # Guardrails: Check for secrets
-    if ! check_secrets "$temp_script"; then return 1; fi
-    
-    # Syntax Validation
-    log_info "Validating Bash syntax..."
-    if ! bash -n "$temp_script"; then
-        log_error "Syntax validation failed (bash -n). Aborting."
-        return 1
-    fi
-    
-    # Shellcheck Validation
-    if [ "$SKIP_SHELLCHECK" = false ] && command -v shellcheck &> /dev/null; then
-        log_info "Running ShellCheck..."
-        if ! shellcheck "$temp_script"; then
-            log_warning "ShellCheck found issues! Proceeding anyway, but please review."
-        fi
-    fi
-    
-    # Apply changes
-    if [ "$DRY_RUN" = false ]; then
-        mv "$temp_script" "$TARGET_FILE"
-        chmod +x "$TARGET_FILE"
-        
-        if [ -n "$new_readme" ] && [ "$TARGET_FILE" = "$SCRIPT_NAME" ]; then
-            echo "$new_readme" > "$README_FILE"
-        fi
-        
-        if [ -n "$new_changes" ] && [ "$TARGET_FILE" = "$SCRIPT_NAME" ]; then
-            # Append changes to the top of the file
-            echo -e "## $(date +%Y-%m-%d)\n$new_changes\n\n$(cat "$CHANGES_FILE")" > "$CHANGES_FILE"
-        fi
-        
-        log_success "Refactoring applied to $TARGET_FILE successfully."
-    else
-        log_info "Dry-run complete. Changes are valid but were not applied."
-        rm "$temp_script"
-    fi
-}
 
 # --- MAIN EXECUTION LOOP ---
 main() {

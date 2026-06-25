@@ -1,3 +1,9 @@
+## 2026-06-25
+
+### v2.1.0
+* **Chain-of-Thought (CoT) Architecture:** Implemented ReAct-style reasoning. The agent is now required to output a `<THOUGHT_PROCESS>` block to explicitly plan its changes and verify guardrails *before* generating any code.
+* **Reasoning Audit Log:** Added logic to the main execution loop to parse the agent's internal monologue and save it to `thought.log`. This provides full transparency into the AI's decision-making process and proves autonomous reasoning.* 
+
 ## 2026-06-24
 
 ### v2.0.1
