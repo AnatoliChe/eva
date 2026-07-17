@@ -34,13 +34,13 @@ This script acts as an autonomous Bash-based multi-agent system, designed for th
 ## Usage
 
 Basic self-mutation using local Ollama (default):
-`./gen.sh`
+`./eva.sh`
 
 Refactor a specific external script using Google Gemini:
-`./gen.sh --target /path/to/other_script.sh --provider google --model gemini-1.5-pro`
+`./eva.sh --target /path/to/other_script.sh --provider google --model gemini-1.5-pro`
 
 Run a dry-run test with OpenAI:
-`./gen.sh --provider openai --model gpt-4o --dry-run`
+`./eva.sh --provider openai --model gpt-4o --dry-run`
 
 ## Current Task (ToDo)
 - [ ] Expand Guardrails to include automated testing (e.g., executing a dummy run of the target script in an isolated namespace).

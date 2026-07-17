@@ -2,14 +2,13 @@
 #
 # Description: Autonomous AI Agent for code refactoring and self-evolution.
 # Features: Multi-provider API (Ollama, OpenAI, Google, llama.cpp), Git backups, Secret Scanning (Guardrails), Target project selection, Stream processing, Stats, Shellcheck, Dry-run.
-# Version: v2.1.0
+# Version: v2.1.1
 #
 set -euo pipefail
 
 # --- CONFIGURATION & COLORS ---
 readonly SCRIPT_NAME="${BASH_SOURCE[0]}"
-readonly SCRIPT_BASENAME="$(basename "$SCRIPT_NAME")"
-readonly SCRIPT_VERSION="2.1.0"
+readonly SCRIPT_VERSION="2.1.1"
 
 # Target files (can be overridden by arguments)
 TARGET_FILE="$SCRIPT_NAME"
@@ -18,10 +17,7 @@ CHANGES_FILE="changes.md"
 PROMPT_FILE="prompt.md"
 
 readonly OUTPUT_LOG="output.out"
-readonly OUTPUT_STREAM="output.stream"
 readonly STATS_FILE="stats.json"
-readonly STATS_LOG="stats.log"
-readonly TEMP_TOKEN_FILE="/tmp/.agent_tokens_$$"
 
 # API Defaults
 PROVIDER="ollama"
@@ -37,6 +33,7 @@ NO_LLM=false
 
 # Load .env if exists for API keys (OpenAI, Google)
 if [ -f ".env" ]; then
+    # shellcheck disable=SC1091
     source .env
 fi
 
@@ -47,7 +44,6 @@ readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[0;33m'
 readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
-readonly MAGENTA='\033[0;35m'
 
 # --- LOGGING UTILITIES ---
 log_info() { echo -e "${BLUE}[INFO]${RESET} $1" >&2; }
@@ -86,8 +82,8 @@ check_secrets() {
     local file_to_check="$1"
     log_info "Guardrails: Scanning for leaked secrets in generated code..."
     
-    # Common patterns for API keys
-    local regex="(AIza[0-9A-Za-z_-]{35}|sk-[a-zA-Z0-9]{48}|AKIA[0-9A-Z]{16})"
+    # Common patterns for API keys (Google, OpenAI legacy + project keys, AWS)
+    local regex="(AIza[0-9A-Za-z_-]{35}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})"
     
     if grep -E -q "$regex" "$file_to_check"; then
         log_error "SECURITY VIOLATION: Potential API key or secret detected in the LLM output!"
@@ -136,9 +132,8 @@ update_stats() {
        --arg provider "$PROVIDER" \
        '$ARGS.named')
        
-    local current_json
-    current_json=$(cat "$STATS_FILE")
-    echo "$current_json" | jq --argjson entry "$new_entry" '.entries += [$entry]' > "${STATS_FILE}.tmp"
+    jq --argjson entry "$new_entry" --argjson max "$MAX_STATS_ENTRIES" \
+        '.entries = ((.entries + [$entry])[-$max:])' "$STATS_FILE" > "${STATS_FILE}.tmp"
     mv "${STATS_FILE}.tmp" "$STATS_FILE"
     log_stat "Stats updated: $elapsed sec, Provider: $PROVIDER, Model: $MODEL"
 }
@@ -188,7 +183,7 @@ apply_changes() {
         echo -e "========== AGENT REASONING LOG | $(date) ==========\n$thought_process\n" >> "thought.log"
     fi
     
-    # 2. Извлечение остальных блоков
+    # 2. Extract the remaining blocks
     local new_readme
     new_readme=$(echo "$raw_response" | awk '/<README>/{flag=1; next} /<\/README>/{flag=0} flag')
     
@@ -204,6 +199,67 @@ apply_changes() {
         return 1
     fi
 
+    # 3. Validation pipeline (Guardrails) — runs on temp copies BEFORE anything is written
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+
+    local tmp_script="$tmp_dir/script.sh"
+    printf '%s\n' "$new_script" > "$tmp_script"
+    [ -n "$new_readme" ]  && printf '%s\n' "$new_readme"  > "$tmp_dir/readme.md"
+    [ -n "$new_changes" ] && printf '%s\n' "$new_changes" > "$tmp_dir/changes.md"
+
+    log_info "Guardrails: Validating Bash syntax (bash -n)..."
+    if ! bash -n "$tmp_script"; then
+        log_error "Syntax validation failed. Generated script is invalid, nothing was written."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    log_success "Syntax validation passed."
+
+    if [ "$SKIP_SHELLCHECK" = false ] && command -v shellcheck > /dev/null 2>&1; then
+        log_info "Guardrails: Running ShellCheck static analysis..."
+        if ! shellcheck --severity=error "$tmp_script" >&2; then
+            log_error "ShellCheck found errors. Refactoring aborted."
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+        shellcheck "$tmp_script" >&2 || log_warning "ShellCheck reported non-critical warnings (see above)."
+    fi
+
+    local generated_file
+    for generated_file in "$tmp_dir"/*; do
+        if ! check_secrets "$generated_file"; then
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+    done
+
+    if [ "$DRY_RUN" = true ]; then
+        log_success "Dry-run: all validations passed. No files were modified."
+        rm -rf "$tmp_dir"
+        return 0
+    fi
+
+    # 4. Atomic writes: temp file in the destination directory, then mv
+    write_atomic "$tmp_script" "$TARGET_FILE"
+    [ -n "$new_readme" ]  && write_atomic "$tmp_dir/readme.md" "$README_FILE"
+    [ -n "$new_changes" ] && write_atomic "$tmp_dir/changes.md" "$CHANGES_FILE"
+
+    log_success "All changes applied to $TARGET_FILE."
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+write_atomic() {
+    local src="$1"
+    local dest="$2"
+    local dest_tmp="${dest}.tmp.$$"
+    cp "$src" "$dest_tmp"
+    if [ -f "$dest" ]; then
+        chmod --reference="$dest" "$dest_tmp" 2>/dev/null || true
+    fi
+    mv -f "$dest_tmp" "$dest"
+}
 
 # --- MAIN EXECUTION LOOP ---
 main() {

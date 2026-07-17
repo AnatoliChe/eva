@@ -1,3 +1,12 @@
+## 2026-07-17
+
+### v2.1.1
+* **Critical Fix — Restored Validation & Write Pipeline:** The `apply_changes()` function was truncated mid-body (likely by an interrupted self-mutation), leaving the script with a syntax error and no code that actually validated or wrote generated files. Restored the full pipeline: `bash -n` syntax check → ShellCheck (errors are fatal, warnings reported) → `check_secrets()` on every generated file → atomic write via same-directory temp file + `mv`.
+* **Guardrails Now Enforced:** `check_secrets()` was previously defined but never called; it now scans the generated script, readme, and changelog before anything touches disk. `--dry-run` runs the full validation pipeline without writing.
+* **Secret Scanner Update:** Broadened the OpenAI key pattern to cover modern project-scoped keys (`sk-` followed by 20+ chars).
+* **Stats Rotation:** `stats.json` is now trimmed to the last `MAX_STATS_ENTRIES` (default 1000) entries.
+* **Cleanup:** Removed unused variables (`OUTPUT_STREAM`, `STATS_LOG`, `TEMP_TOKEN_FILE`, `MAGENTA`); fixed usage examples in readme (`gen.sh` → `eva.sh`).
+
 ## 2026-06-25
 
 ### v2.1.0
