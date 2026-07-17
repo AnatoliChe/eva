@@ -14,17 +14,22 @@ This script acts as an autonomous Bash-based multi-agent system, designed for th
 * **Git State Management:** Automatically uses local Git for atomic backups and version control, ensuring safe rollbacks if self-mutation fails.
 * **Dual-Layer Guardrails (Safety & Alignment):** * *System-Level:* Built-in `check_secrets()` prevents the LLM from accidentally leaking API keys, and `bash -n` validates syntax before any code is applied.
     * *Prompt-Level:* Strict LLM instructions in `prompt.md` prevent the agent from disabling its own security checks or using insecure scripting patterns.
+* **Isolated Smoke Testing:** Every generated script must survive a dummy run inside an isolated sandbox (empty temp directory, network-isolated via `unshare` when available, hard timeout) before it is allowed to replace the target.
+* **Self-Safe Response Parsing:** Structural tags in the LLM response are matched as exact whole lines by a generic `extract_block()` helper, so the parser can safely process its own source code during self-mutation.
 * **Atomic Writes:** Code updates are performed via temporary files to prevent corruption during I/O failures.
 * **ShellCheck Integration:** Built-in static analysis integration to ensure generated code meets Bash best practices.
 * **Execution Modes:**
     * `--dry-run`: Evaluate changes without writing them to disk.
     * `--no-llm`: Reprocess the last generated response stored in `output.out`.
-* **Analytics & Stats:** Automatically collects JSON-based metrics (`stats.json`) covering execution time, successful mutations, used models, and providers.
-* ** Chain-of-Thought (CoT) Auditing: EVA does not blindly generate code. It utilizes an internal <THOUGHT_PROCESS> validation step where it plans changes and verifies its own adherence to guardrails before execution. These cognitive steps are extracted and preserved in thought.log for transparency and human-in-the-loop oversight.
+    * `--api-url <url>`: Override the API endpoint for the chosen provider (self-hosted gateways, proxies, remote Ollama).
+    * `--version`: Print the agent version and exit.
+* **Resilient API Calls:** All requests go through configurable curl timeouts (`CURL_CONNECT_TIMEOUT`, default 10s; `CURL_MAX_TIME`, default 900s), so a dead endpoint fails fast instead of hanging the loop.
+* **Analytics & Stats:** Automatically collects JSON-based metrics (`stats.json`) covering execution time, successful mutations, used models, and providers. The `--stats` flag prints an aggregated report (total runs, success rate, average duration, providers, models).
+* **Chain-of-Thought (CoT) Auditing:** EVA does not blindly generate code. It utilizes an internal THOUGHT_PROCESS validation step where it plans changes and verifies its own adherence to guardrails before execution. These cognitive steps are extracted and preserved in thought.log for transparency and human-in-the-loop oversight.
 
 ## Technical Requirements
 
-* **Dependencies:** `curl`, `jq`, `git`.
+* **Dependencies:** `curl`, `jq`, `git`, `coreutils` (`timeout`); optional: `shellcheck`, `unshare` (util-linux) for network-isolated smoke tests.
 * **API Configuration:** For OpenAI or Google models, create a `.env` file in the root directory:
     ```env
     OPENAI_API_KEY="sk-..."
@@ -43,4 +48,4 @@ Run a dry-run test with OpenAI:
 `./eva.sh --provider openai --model gpt-4o --dry-run`
 
 ## Current Task (ToDo)
-- [ ] Expand Guardrails to include automated testing (e.g., executing a dummy run of the target script in an isolated namespace).
+- [ ] Support patch/diff-based mutations as an alternative to full-file rewrites, to reduce the risk of truncated generations on large targets.
